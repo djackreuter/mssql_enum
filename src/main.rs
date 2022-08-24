@@ -10,7 +10,7 @@ async fn db_conn() -> anyhow::Result<Client<TcpStream>> {
     println!("Enter FQDN of host:");
     let fqdn: String = get_input();
 
-    println!("[+] Connecting to database via Kerberos...");
+    println!("[+] Connecting to database...");
     config.host(&fqdn);
     config.database("master");
     config.port(1433);
