@@ -9,3 +9,7 @@
 * Can find linked MSSQL servers and execute code on those as well.
 
 _Command execution does not return the command output. Best to use it to execute a reverse shell._
+
+Compile with `cargo build`
+
+Run the sql.exe file and follow prompts.
